@@ -9,20 +9,24 @@ module Site
   ) where
 
 ------------------------------------------------------------------------------
-import           Control.Applicative
-import           Data.ByteString (ByteString)
-import           Data.Map.Syntax ((##))
+import Control.Applicative ((<|>))
+import Data.ByteString (ByteString)
+import Data.Map.Syntax ((##))
 import qualified Data.Text as T
-import           Snap.Core
-import           Snap.Snaplet
-import           Snap.Snaplet.Auth
-import           Snap.Snaplet.Auth.Backends.JsonFile
-import           Snap.Snaplet.Heist
-import qualified Snap.Snaplet.Session.Backends.CookieSession as Session
-import           Snap.Util.FileServe
+import qualified Snap.Core as S
+import Snap.Snaplet (Handler, SnapletInit, nestSnaplet, with, makeSnaplet, addRoutes)
+import Snap.Snaplet.Auth (
+    AuthManager, registerUser,
+    loginUser, logout,
+    defAuthSettings, addAuthSplices,
+    )
+import Snap.Snaplet.Auth.Backends.JsonFile (initJsonFileAuthManager)
+import Snap.Snaplet.Heist (heistInit, heistLocal, render)
+import Snap.Snaplet.Session.Backends.CookieSession (initCookieSessionManager)
+import Snap.Util.FileServe (serveDirectory)
 import qualified Heist.Interpreted as I
 ------------------------------------------------------------------------------
-import           Application
+import Application (App(App), sess, auth, heist)
 
 
 ------------------------------------------------------------------------------
@@ -39,7 +43,7 @@ handleLogin authError = heistLocal (I.bindSplices errs) $ render "login"
 handleLoginSubmit :: Handler App (AuthManager App) ()
 handleLoginSubmit =
     loginUser "login" "password" Nothing
-              (\_ -> handleLogin err) (redirect "/")
+              (\_ -> handleLogin err) (S.redirect "/")
   where
     err = Just "Unknown user or password"
 
@@ -47,16 +51,16 @@ handleLoginSubmit =
 ------------------------------------------------------------------------------
 -- | Logs out and redirects the user to the site index.
 handleLogout :: Handler App (AuthManager App) ()
-handleLogout = logout >> redirect "/"
+handleLogout = logout >> S.redirect "/"
 
 
 ------------------------------------------------------------------------------
 -- | Handle new user form submit
 handleNewUser :: Handler App (AuthManager App) ()
-handleNewUser = method GET handleForm <|> method POST handleFormSubmit
+handleNewUser = S.method S.GET handleForm <|> S.method S.POST handleFormSubmit
   where
     handleForm = render "new_user"
-    handleFormSubmit = registerUser "login" "password" >> redirect "/"
+    handleFormSubmit = registerUser "login" "password" >> S.redirect "/"
 
 
 ------------------------------------------------------------------------------
@@ -75,7 +79,7 @@ app :: SnapletInit App App
 app = makeSnaplet "app" "An snaplet example application." Nothing $ do
     h <- nestSnaplet "" heist $ heistInit "templates"
     s <- nestSnaplet "sess" sess $
-           Session.initCookieSessionManager "site_key.txt" "sess" Nothing (Just 3600)
+           initCookieSessionManager "site_key.txt" "sess" Nothing (Just 3600)
 
     -- NOTE: We're using initJsonFileAuthManager here because it's easy and
     -- doesn't require any kind of database server to run.  In practice,
